@@ -851,6 +851,185 @@ class Texture(URDFType):
         return v
 
 
+class BodyType(URDFType):
+    """One of the extension tags for URDF that allows users to specify their
+    robots' body type, either 'rigid' or 'soft'.
+
+    Parameters
+    ----------
+    type : str
+        The type of the body.
+    """
+    TYPES = ['rigid', 'soft']
+    _TAG = 'bodytype'
+
+    def __init__(self, body_type):
+        self.body_type = body_type
+
+    @property
+    def body_type(self):
+        """str : The type of this body.
+        """
+        return self._body_type
+
+    @body_type.setter
+    def body_type(self, value):
+        value = str(value)
+        if value not in BodyType.TYPES:
+            raise ValueError('Unsupported body type {}'.format(value))
+        self._body_type = value
+
+    @classmethod
+    def _from_xml(cls, node, path):
+        kwargs = cls._parse(node, path)
+        kwargs['body_type'] = str(node.attrib['type'])
+        return BodyType(**kwargs)
+
+    def copy(self, prefix='', scale=None):
+        """Create a deep copy with the prefix applied to all names.
+
+        Parameters
+        ----------
+        prefix : str
+            A prefix to apply to all names.
+
+        Returns
+        -------
+        :class:`.BodyType`
+            A deep copy.
+        """
+        return BodyType(
+            body_type=self.body_type
+        )
+
+
+class MaterialProperty(URDFType):
+    """User defined material property for simulation.
+
+    Parameters
+    ----------
+    filename : str
+        The path to the yaml file that contains material property.
+    """
+
+    _ATTRIBS = {
+        'filename': (str, True)
+    }
+    _TAG = 'materialproperty'
+
+    def __init__(self, filename):
+        self.filename = filename
+
+    @property
+    def filename(self):
+        """str : Path to the yaml file containing material properties.
+        """
+        return self._filename
+
+    @filename.setter
+    def filename(self, value):
+        self._filename = str(value)
+
+    @classmethod
+    def _from_xml(self, parent, path):
+        kwargs = cls._parse(node, path)
+        kwargs['filename'] = str(node.attrib['filename'])
+        return MaterialProperty(**kwargs)
+
+    def copy(self, prefix='', scale=None):
+        """Create a deep copy with the prefix applied to all names.
+
+        Parameters:
+        ----------
+        prefix : str
+            A prefix to apply to all names.
+
+        Returns
+        -------
+        :class:`.MaterialProperty`
+            A deep copy.
+        """
+        return MaterialProperty(
+            filename=self.filename
+        )
+
+
+class Taichi(URDFType):
+    """The Extension Tag for URDF that can be used to specify additional
+    properties for Taichi Simulation.
+    Similar to <gazebo> tag, the <taichi> tag allows users to customize their
+    robots.
+
+    Parameters
+    ----------
+    name : str, optional
+        The name of this taichi tag.
+    bodytype : :class:`.BodyType`, optional
+        Either 'soft' robot or 'rigid' robot.
+    materialproperty : :class:`.MaterialProperty`, optional
+        The material properties of a body.
+    """
+    _ATTRIBS = {
+        'name': (str, False)
+    }
+    _ELEMENTS = {
+        'bodytype': (BodyType, False, False),
+        'materialproperty': (MaterialProperty, False, False),
+    }
+    _TAG = 'taichi'
+
+    def __init__(self, bodytype, name=None, materialproperty=None):
+        self.bodytype = bodytype
+        self.name = name
+        self.materialproperty = materialproperty
+
+    @property
+    def bodytype(self):
+        """:class:`.BodyType` : The type of this body, either 'rigid' or
+        'soft'.
+        """
+        return self._bodytype
+
+    @bodytype.setter
+    def bodytype(self, value):
+        if value is not None:
+            if not isinstance(value, BodyType):
+                raise TypeError('Must set body type with with BodyType object')
+        self._bodytype = value
+
+    @property
+    def materialproperty(self):
+        """:class:`.MaterialProperty` : A string containing a path to a yaml file
+        that users provide detailed properties of the material they used.
+        """
+        return self._materialproperty
+
+    @materialproperty.setter
+    def materialproperty(self, value):
+        if value is not None:
+            if not isinstance(value, MaterialProperty):
+                raise TypeError('Must set material property with with MaterialProperty object')
+        self._materialproperty = value
+
+    def copy(self, prefix='', scale=None):
+        """Create a deep copy of the taichi with the prefix applied to all names.
+
+        Parameters
+        ----------
+        prefix : str
+            A prefix to apply to all joint and link names.
+
+        Returns
+        ----------
+        :class:`.Taichi`
+            A deep copy of the taichi.
+        """
+        return Taichi(
+            name='{}{}'.format(prefix, self.name),
+            bodytype=self.bodytype,
+            materialproperty=self.materialproperty
+        )
+
 class Material(URDFType):
     """A material for some geometry.
 
@@ -858,6 +1037,8 @@ class Material(URDFType):
     ----------
     name : str
         The name of the material.
+    taichi : :class:`.Taichi`, optional
+        A extended tag allows user to define material properties.
     color : (4,) float, optional
         The RGBA color of the material in the range [0,1].
     texture : :class:`.Texture`, optional
@@ -867,14 +1048,16 @@ class Material(URDFType):
         'name': (str, True)
     }
     _ELEMENTS = {
+        'taichi': (Taichi, False, False),
         'texture': (Texture, False, False),
     }
     _TAG = 'material'
 
-    def __init__(self, name, color=None, texture=None):
+    def __init__(self, name, taichi, color=None, texture=None):
         self.name = name
         self.color = color
         self.texture = texture
+        self.taichi = taichi
 
     @property
     def name(self):
@@ -887,6 +1070,18 @@ class Material(URDFType):
         self._name = str(value)
 
     @property
+    def taichi(self):
+        """:class:`.Taichi` : Extented tags for Taichi Simulation
+        """
+        return self._taichi
+
+    @taichi.setter
+    def taichi(self, value):
+        if value is not None and not isinstance(value, Taichi):
+            raise TypeError('Expected Taichi object')
+        self._taichi = value
+
+    @property
     def color(self):
         """(4,) float : The RGBA color of the material, in the range [0,1].
         """
@@ -895,7 +1090,7 @@ class Material(URDFType):
     @color.setter
     def color(self, value):
         if value is not None:
-            value = np.asanyarray(value).astype(np.float)
+            value = np.asanyarray(value).astype(np.float64)
             value = np.clip(value, 0.0, 1.0)
             if value.shape != (4,):
                 raise ValueError('Color must be a (4,) float')
@@ -962,6 +1157,7 @@ class Material(URDFType):
         """
         return Material(
             name='{}{}'.format(prefix, self.name),
+            taichi=self.taichi,
             color=self.color,
             texture=self.texture
         )
@@ -2492,6 +2688,7 @@ class Link(URDFType):
     ----------
     name : str
         The name of the link.
+    taichi : :class:`.Taichi`, optional
     inertial : :class:`.Inertial`, optional
         The inertial properties of the link.
     visuals : list of :class:`.Visual`, optional
@@ -2504,14 +2701,16 @@ class Link(URDFType):
         'name': (str, True),
     }
     _ELEMENTS = {
+        'taichi': (Taichi, False, False),
         'inertial': (Inertial, False, False),
         'visuals': (Visual, False, True),
         'collisions': (Collision, False, True),
     }
     _TAG = 'link'
 
-    def __init__(self, name, inertial, visuals, collisions):
+    def __init__(self, name, taichi, inertial, visuals, collisions):
         self.name = name
+        self.taichi = taichi
         self.inertial = inertial
         self.visuals = visuals
         self.collisions = collisions
@@ -2527,6 +2726,18 @@ class Link(URDFType):
     @name.setter
     def name(self, value):
         self._name = str(value)
+
+    @property
+    def taichi(self):
+        """:class:`.Taichi` : Extented tags for Taichi Simulation
+        """
+        return self._taichi
+
+    @taichi.setter
+    def taichi(self, value):
+        if value is not None and not isinstance(value, Taichi):
+            raise TypeError('Expected Taichi object')
+        self._taichi = value
 
     @property
     def inertial(self):
@@ -2616,6 +2827,7 @@ class Link(URDFType):
             A deep copy of the Link.
         """
         inertial = self.inertial.copy() if self.inertial is not None else None
+        taichi = self.taichi.copy() if self.taichi is not None else None
         cm = self._collision_mesh
         if scale is not None:
             if self.collision_mesh is not None and self.inertial is not None:
@@ -2637,12 +2849,14 @@ class Link(URDFType):
 
         cpy = Link(
             name='{}{}'.format(prefix, self.name),
+            taichi=taichi,
             inertial=inertial,
             visuals=visuals,
             collisions=[v.copy(prefix=prefix, scale=scale) for v in self.collisions],
         )
         cpy._collision_mesh = cm
         return cpy
+
 
 
 class URDF(URDFType):
