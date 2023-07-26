@@ -931,7 +931,7 @@ class MaterialProperty(URDFType):
         self._filename = str(value)
 
     @classmethod
-    def _from_xml(self, parent, path):
+    def _from_xml(cls, node, path):
         kwargs = cls._parse(node, path)
         kwargs['filename'] = str(node.attrib['filename'])
         return MaterialProperty(**kwargs)
