@@ -3787,6 +3787,84 @@ class URDF(URDFType):
             scene.add(mesh, pose=pose)
         pyrender.Viewer(scene, use_raymond_lighting=True)
 
+    def showTemp(self, cfg=None, use_collision=False):
+        # from ....mesh_loader.mesh_loader import LoadSTL
+        # from ....mesh_loader.mesh_loader import LoadDAE
+        import taichi as ti
+        if use_collision:
+            fk = self.collision_trimesh_fk(cfg=cfg)
+        else:
+            fk = self.visual_trimesh_fk(cfg=cfg)
+
+        ti.init(arch=ti.cpu)
+        window = ti.ui.Window("Mesh Loader", res=(960, 960), vsync=True)
+        gui = window.get_gui()
+        canvas = window.get_canvas()
+        canvas.set_background_color((1, 1, 1))
+        scene = ti.ui.Scene()
+        camera = ti.ui.Camera()
+        camera = ti.ui.Camera()
+        camera.position(-1, -1, 1)  # x, y, z
+        camera.lookat(0, 0, 0)
+        camera.up(0, 0, 1)
+        scene.set_camera(camera)
+
+        origin = [0.0, 0.0, 0.0]
+        axis_length = 0.5
+        x_axis = ti.Vector.field(3, dtype=float, shape=2)
+        y_axis = ti.Vector.field(3, dtype=float, shape=2)
+        z_axis = ti.Vector.field(3, dtype=float, shape=2)
+
+        x_axis[0], x_axis[1] = origin, [axis_length, 0, 0]
+        y_axis[0], y_axis[1] = origin, [0, axis_length, 0]
+        z_axis[0], z_axis[1] = origin, [0, 0, axis_length]
+
+        vs = []     # List of all vertices for each mesh object
+        fs = []     # List of all faces for each mesh object
+        ns = []     # List of all normals for each mesh object
+        ps = []     # List of all transfomrations for each mesh object
+
+        for tm in fk:
+            pose = fk[tm]
+            src_vertices = np.asarray(tm.vertices, dtype=np.float32)
+            src_faces = np.asarray(tm.faces, dtype=np.int32)
+            src_normals = np.asarray(tm.vertex_normals, dtype=np.float32)
+            src_transform = np.asarray(pose, dtype=np.float32).reshape(1,1,4,4)
+            vertices = ti.Vector.field(n=3, dtype=ti.f32, shape=src_vertices.shape[0])
+            vertices.from_numpy(src_vertices)
+            faces = ti.Vector.field(n=3, dtype=ti.i32, shape=src_faces.shape[0])
+            faces.from_numpy(src_faces)
+            normals = ti.Vector.field(n=3, dtype=ti.f32, shape=src_normals.shape[0])
+            normals.from_numpy(src_normals)
+            transform = ti.Matrix.field(4, 4 ,dtype=ti.f32, shape=(1, 1))
+            transform.from_numpy(src_transform)
+            vs.append(vertices)
+            fs.append(faces)
+            ns.append(normals)
+            ps.append(transform)
+
+        while window.running:
+            camera.track_user_inputs(window, movement_speed=0.03, hold_key=ti.ui.SPACE)
+            scene.set_camera(camera)
+            # scene.ambient_light((0.1, 0.1, 0.1))
+            # scene.point_light(pos=[0.4, 0.4, 0.4], color=[0.8, 0.8, 0.8])
+
+            scene.lines(x_axis, color=(1, 0, 0), width=6)
+            scene.lines(y_axis, color=(0, 1, 0), width=6)
+            scene.lines(z_axis, color=(0, 0, 1), width=6)
+
+            for i in range(len(vs)):
+                scene.mesh_instance(
+                    vertices=vs[i],
+                    indices=fs[i],
+                    normals=ns[i],
+                    color=(0, 0, 0),
+                    show_wireframe=True,
+                    transforms=ps[i],
+                )
+            canvas.scene(scene)
+            window.show()
+
     def copy(self, name=None, prefix='', scale=None, collision_only=False):
         """Make a deep copy of the URDF.
 
